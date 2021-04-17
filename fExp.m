@@ -5,10 +5,6 @@
 
 % DESCRIPTION: 
 % - calibration switch during experiment (c)
-% - Instructions: follow the shortest path, fill skipped letters with _
-% - TBD (1): (optional), 13 point calibration
-% - TBD (2); Eyelink II, fixation point drift correction after enter
-% - TBD (3): Exponential filtering of eye and mouse movements
 
 % gamma correction is off
 function fExp(subject, session, control_mode)
