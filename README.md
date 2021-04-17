@@ -1,5 +1,5 @@
 # Gaze-typing task 
-Matlab code used to run the experiment described in this paper paper:
+Matlab code used to run the gaze-typing experiment described in this paper:
 
 Souto, Marsh, Hutchinson, Judge, Paterson (in press). Cognitive plasticity induced by gaze-control technology: Gaze-typing improves performance in the antisaccade task. Computers in Human Behaviour.
 
