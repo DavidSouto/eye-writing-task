@@ -1,37 +1,52 @@
-% Feb 2018 DS @ Uni Leicester
+% August 2018 DS @ Uni Leicester
 %
 % USAGE:
 % controlMode = 0 (mouse), 1 (eye), Eyelink = 0 (no eyelink), 1(eyelink)
 
 % DESCRIPTION: 
 % - calibration switch during experiment (c)
+% - Instructions: follow the shortest path, fill skipped letters with _
+% Optional 13 point calibration, if calib = 1
 
 % gamma correction is off
 function fExp(subject, session, control_mode)
 
+    trl.DEBUG = 1; % ZERO FOR EXP
+    trl.joystickControl = 0;
+    trl.Eyelink = 0; 
+    
     if(nargin < 3), error('missing arguments'); end
     
     trl.exp = 1; 
-    trl.sub = subject;
+    trl.sub = subject;                                                                                                                                                      
     trl.blk = session;
     trl.control = control_mode;    
-    trl.Eyelink = 1; 
-    trl.DEBUG = 1;
-    trl.joystickControl = 0;
-
-    trl.DwellingCriterion = 30;                             % Dwelling criterion 
-    
-    if trl.control== 1 && ~trl.Eyelink
-        error('Wrong parameter, Eyelink has to be on to do the eye-writing');
-    end
-
-    if trl.joystickControl
-        trl.joy = vrjoystick(1);
+    if ~trl.Eyelink
+        warning('DEMO: NO EYELINK MODE');
     end
     
+    %% ADJUST CALIB SIZE HERE
+    gfx.CALIB_X = 10;
+    gfx.CALIB_Y = 5;    
+    
+    if nargin<4
+                                                                                                                                            
+        trl.calib = 1;
+    else
+        trl.calib = calib; 
+    end
+
+    trl.criterion_filename = [int2str(trl.sub) '.savecrit.mat'];% Dwelling criterion 
+    if exist(trl.criterion_filename,'file') % load the last value of previous session if exists
+        load(trl.criterion_filename,'VAL');
+        trl.DwellingCriterion = VAL;
+    else
+        trl.DwellingCriterion = 40;                         % Dwelling criterion 
+    end
+
     sInitDisplay;                                           % Initialize display
     sExpVars;                                               % Experimental (trl) and Display variables (gfx)
-            
+        
     if(trl.Eyelink), sInitEL; else el = []; end             % Initialize eyelink 
     if(trl.Eyelink), EyelinkDoTrackerSetup(el); end         % Calibrate and Validate   
         
@@ -47,16 +62,22 @@ function fExp(subject, session, control_mode)
             trl.expon = expon;
             fDispBlockInfo(win, trl, expon);
             k = 1;
-            while( k < trl.nTrials)
+            while( k <= trl.nTrials)
                 trl.trl = k;
-                
+                if(trl.Eyelink)
+                    if trl.joystickControl
+                        el.allowjoystick = 1;
+                    else
+                        el.allowjoystick = 0;
+                    end
+                    EyelinkDoDriftCorrectionDS(el,gfx.wrdCentre(1),gfx.scMid(2)); %see how to control
+                end
                 if(trl.Eyelink), sStartRec; end                            % start eyelink rec
                                                                            % display stimuli
-                %EyelinkDoDriftCorrection(el); %see how to control
-                [trl, POS]= fDrawStimProc(win,gfx,trl,el);
+                [trl, POS]= fDrawStimProc(win,gfx,trl,util,el);
 
                 if(trl.Eyelink), sStopRec; end                             % stop eyelink rec                             
-                if(trl.Eyelink), forceCalib(el,trl); end                   % allow to force calibration if necessary
+                if(trl.Eyelink), forceCalib(el,trl,util); end                   % allow to force calibration if necessary
                 
                 trl = fSaveTrial(trl, util, POS);                          
                 if ~trl.repeat
@@ -67,62 +88,56 @@ function fExp(subject, session, control_mode)
     if trl.Eyelink, fCloseEL(util); end    
     fQuitProg();
 end
-function trl=fLoadCorpus(trl)                                              % create corpus
-    fid=fopen('ucrel.corpus.csv');
-    WORDS = textscan(fid,'%s %d %s','delimiter',',');
+function trl=fLoadCorpus(trl)     % create the corpus
+
+    if IsLinux
+        fid=fopen('corpus/ucrel.corpus.filt.csv');
+    else
+        fid=fopen('corpus\ucrel.corpus.filt.csv');
+    end
+    WORDS = textscan(fid,'%s %d %d %2.1f %d','delimiter',',');
     fclose(fid);
 
     % make a random selection of trl.ntrl words over the whole n-letter
     % corpus, repetition is allowed, should make an equal distribution of
     % frequencies accross sessions (combination with replacement)
-    id = find(WORDS{2}==6); % 765 words
-           
-    for n = 20:(200+2*trl.TrainingTrials+20) %length(id)                                                   
-        trl.sWORDS{n-19}= WORDS{3}{id(n)};% word shortlist
+    id = find(WORDS{5}==6); % 765 6-letter words
+    word_sample = randperm(length(id),trl.NWORDS);
+    for n = 1:length(word_sample)
+        trl.sWORDS{n} = WORDS{1}{id(word_sample(n))}; % sampling without replacement
     end
-    % for that block
-    if trl.training
-        trl.session_corpus_id = 1:trl.TrainingTrials;
-    else       
-        if trl.blk>0
-            nsession = 1;
-        else
-            nsession = 0;
-        end
-        trl.session_corpus_id = (trl.TrainingTrials*nsession+(nsession-1)*trl.nTrials+1):(trl.TrainingTrials*nsession+nsession*trl.nTrials); 
-    end
-
 end
 function fQuitProg()
     sca;
     clear;
 end
 function [trl] = fSaveTrial(trl, util, POS)
+
     fid = fopen(util.log_name,'a');
     fprintf(fid, '%d %d %d %d %d %d %s %s %d %d %d\n', ... 
                 trl.exp, trl.expon, trl.sub, trl.blk, trl.num, trl.trl, trl.word, trl.word_to_write, trl.repeat, trl.DwellingCriterion, trl.control);     
     fclose(fid);
     
-    util.clob_name = sprintf('%sc.%ds%d.mat',util.dir_name, trl.blk, trl.num);
+    % trl.session_corpus_id = (trl.TrainingTrials*nsession+(nsession-1)*trl.nTrials+1):(trl.TrainingTrials*nsession+nsession*trl.nTrials);    
+    util.clob_name = sprintf('%s/c.%ds%d.mat',util.dir_name, trl.blk, trl.num);
 
-    % save cursor traj
-    DATA = [POS.x, POS.y, POS.t, POS.evt];
+    DATA = [POS.x, POS.y, POS.t, POS.EVT];
     save(util.clob_name,'DATA');     
             
     trl.num = trl.num + 1;
 end
 function fDispExpInfo(win,trl,gfx)   
+
     Screen('Flip',  win, [], 1);
     Screen('TextFont', win, 'Arial');
     Screen('TextSize', win, 20);
-            
     screen_param = ['---------------\n'...
                     'Exp: ' int2str(trl.exp) '\n'...
                     'Monitor frequency: ' int2str(gfx.monitor_freq) ' Hertz\n'...
                     'Screen resolution: ' int2str(gfx.h_pixel) 'x' int2str(gfx.v_pixel) ' pixels\n'...
                     'Desired sub. distance: ' int2str(gfx.sub_distance) ' cm\n'...
                     'Designed for screen: ' gfx.screen '\n' ...
-                    '---------------\n Press key to proceed\n'];
+                    '---------------\n Press A on the gamepad to continue\n'];
 
     DrawFormattedText(win, screen_param, gfx.scMid(1)-gfx.scMid(1)*.5, gfx.scMid(2)-400, 255,[],[],[],2); 
     Screen('Flip',  win, [], 1);
@@ -130,18 +145,18 @@ function fDispExpInfo(win,trl,gfx)
     WaitSecs(.5);
     
     if trl.joystickControl
-        
-        %h(5) = 0;
-        h = 0;
-        while(~h)%(h(5)))
-            h = button(trl.joy,1);
-            %h = jst;        
-        end
+        fWaitForJoyStick()
     else
         KbWait([], 2);
     end
 end
 function fDispBlockInfo(win,trl,expon)
+    
+    if trl.joystickControl   
+        fWaitForJoyStick()
+    else
+        KbWait([], 2);
+    end
     Screen('Flip',  win); % clear the screen
     Screen('TextSize', win, 30);
 
@@ -155,36 +170,23 @@ function fDispBlockInfo(win,trl,expon)
     DrawFormattedText(win, sprintf('%s%s\n', PHASE{expon+1}, INSTRUCTION), 'center', 'center', [255 255 255],80,[],[],2);
     Screen('Flip',  win, [], 1);
 
-    WaitSecs(1);
-    
+    WaitSecs(5);
+
     if trl.joystickControl   
-        %h(5) = 0;
-        h = 0;
-        while(~h)%(h(5)))
-            h = button(trl.joy,1);
-            %h = jst;        
-        end
+        fWaitForJoyStick()
     else
         KbWait([], 2);
     end
-
 end
-function fCloseEL(util)
-    Eyelink('command', 'generate_default_targets = YES');
-    Eyelink('CloseFile');
-    Eyelink('ReceiveFile',[],util.dir_name,1);  
-    Eyelink('Shutdown');
-    sca;
-    commandwindow; 
-end
-function forceCalib(el,trl)
+function forceCalib(el,trl,util)
         [~,~,KbCode] = KbCheck;
         if KbCode(KbName('b')) 
             if(trl.Eyelink)
                 EyelinkDoTrackerSetup(el);                                 % Calibrate & Validate                
             end
         elseif KbCode(KbName('q'))                                         % Allow early exit
+            fCloseEL(util);
             sca;
             clear;
         end
-end 
+end

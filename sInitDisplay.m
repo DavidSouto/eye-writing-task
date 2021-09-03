@@ -24,19 +24,3 @@ KbName('UnifyKeyNames');
 
 Screen('TextFont', win, 'Arial');
 Screen('TextSize', win, 20);
-
-%% Gamma correction
-% epar.GAMMA_TABLE = '/lut/nec-juin-2011';
-% 
-% addpath(genpath('.')); 
-% util.direxp = cd;
-% 
-% % Do the gamma correction
-% epar.doGamma = 1;    
-% if epar.doGamma,
-%     newGamma(:,1) = dlmread([util.direxp epar.GAMMA_TABLE '.r']);
-%     newGamma(:,2) = dlmread([util.direxp epar.GAMMA_TABLE '.g']);
-%     newGamma(:,3) = dlmread([util.direxp epar.GAMMA_TABLE '.b']);
-%     newGamma = newGamma./255;
-%     oldGamma = Screen('LoadNormalizedGammaTable',win,newGamma);
-% end
